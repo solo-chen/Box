@@ -37,6 +37,13 @@ import xyz.doikki.videoplayer.render.RenderViewFactory;
 import xyz.doikki.videoplayer.util.L;
 import xyz.doikki.videoplayer.util.PlayerUtils;
 
+// 用于RTSP的进度保存功能需要的库
+import java.text.SimpleDateFormat;
+import java.text.ParseException;
+import java.util.Date;
+import java.util.Locale;
+import android.util.Log;
+
 /**
  * 带泛型的播放器，可继承 AbstractPlayer 扩展自己的播放器
  * Created by Doikki on 2017/4/7.
@@ -216,6 +223,29 @@ public class BaseVideoView<P extends AbstractPlayer> extends FrameLayout
             //读取播放进度
             if (mProgressManager != null) {
                 mCurrentPosition = mProgressManager.getSavedProgress(mProgressKey == null ? mUrl : mProgressKey);
+                //增加RTSP的状态保存播放
+                long pos = mCurrentPosition;
+                if (mUrl != null && mUrl.startsWith("rtsp://") && mUrl.contains("Playseek")) {
+                    try {
+                        // 提取 Playseek 参数中的起始时间
+                        String baseTime = mUrl.replaceAll(".*Playseek=([0-9]{14})-[0-9]{14}.*", "$1");
+
+                        // 将起始时间转换为毫秒值
+                        long baseTimeMillis = new SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault()).parse(baseTime).getTime();
+
+                        // 根据用户跳转的偏移时间 (pos) 计算新的开始时间
+                        long newStartTimeMillis = baseTimeMillis + pos;
+
+                        // 格式化新的起始时间
+                        String newStartTime = new SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault()).format(new Date(newStartTimeMillis));
+
+                        // 替换 URL 中的 Playseek 参数，仅更新起始时间部分，结束时间保持不变
+                        String newUrl = mUrl.replaceAll("Playseek=[0-9]{14}-", "Playseek=" + newStartTime + "-");
+                        setUrl(newUrl);
+                     } catch (ParseException e) {
+                        e.printStackTrace();
+                    }
+                }
             }
         } else {
             mCurrentPosition = 0;
@@ -486,8 +516,50 @@ public class BaseVideoView<P extends AbstractPlayer> extends FrameLayout
      */
     @Override
     public void seekTo(long pos) {
-        if (isInPlaybackState()) {
-            mMediaPlayer.seekTo(pos);
+        if (mUrl != null && mUrl.startsWith("rtsp://") && mUrl.contains("Playseek")) {
+            try {
+                // 提取 Playseek 参数中的起始时间
+                String baseTime = mUrl.replaceAll(".*Playseek=([0-9]{14})-[0-9]{14}.*", "$1");
+
+                // 将起始时间转换为毫秒值
+                long baseTimeMillis = new SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault()).parse(baseTime).getTime();
+
+                // 根据用户跳转的偏移时间 (pos) 计算新的开始时间
+                long newStartTimeMillis = baseTimeMillis + pos;
+
+                // 格式化新的起始时间
+                String newStartTime = new SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault()).format(new Date(newStartTimeMillis));
+
+                // 替换 URL 中的 Playseek 参数，仅更新起始时间部分
+                if (!mUrl.contains("Playseek")) {
+                    Log.e("VideoView", "echo-seekTo: URL does not contain Playseek parameter.");
+                    return;
+                }
+                String newUrl = mUrl.replaceAll("Playseek=[0-9]{14}-", "Playseek=" + newStartTime + "-");
+                Log.i("VideoView", "echo-seekTo-mCurrentPosition: " + mCurrentPosition);
+                Log.i("VideoView", "echo-seekTo-pos: " + pos);
+                mCurrentPosition = pos;
+                if (isInPlaybackState()) {
+                    Log.d("VideoView", "echo-seekTo: Player is in playback state, setting new URL.");
+                    setUrl(newUrl);
+                    addDisplay();
+                    startPrepare(false);
+                } else {
+                    Log.e("VideoView", "echo-seekTo: Player is not in a valid state for seeking.");
+                }
+            } catch (ParseException e) {
+                Log.e("VideoView", "echo-seekTo: Failed to parse baseTime", e);
+            } catch (Exception e) {
+                Log.e("VideoView", "echo-seekTo: Unexpected error during seekTo", e);
+            }
+        } else {
+            // 非 RTSP 流的普通跳转逻辑
+            if (isInPlaybackState()) {
+                Log.d("VideoView", "echo-seekTo: Seeking to position: " + pos);
+                mMediaPlayer.seekTo(pos);
+            } else {
+                Log.e("VideoView", "echo-seekTo: Player is not in a valid state for seeking.");
+            }
         }
     }
 
@@ -536,7 +608,9 @@ public class BaseVideoView<P extends AbstractPlayer> extends FrameLayout
         if (!isMute() && mAudioFocusHelper != null) {
             mAudioFocusHelper.requestFocus();
         }
-        if (mCurrentPosition > 0) {
+        if (mUrl != null && mUrl.startsWith("rtsp://") && mUrl.contains("Playseek")) {
+            startInPlaybackState();
+        } else if (mCurrentPosition > 0) {
             seekTo(mCurrentPosition);
         }
     }
