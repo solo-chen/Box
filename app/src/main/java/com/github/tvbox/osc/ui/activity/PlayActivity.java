@@ -1937,6 +1937,9 @@ public class PlayActivity extends BaseActivity {
     }
 
     boolean checkVideoFormat(String url) {
+        if (url.startsWith("rtsp://")) {
+            return true; 
+        }
         if (url.contains("url=http") || url.contains(".html")) {
             return false;
         }
