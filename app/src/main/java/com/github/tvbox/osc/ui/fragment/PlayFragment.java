@@ -1826,6 +1826,9 @@ public class PlayFragment extends BaseLazyFragment {
 
     boolean checkVideoFormat(String url) {
         try {
+            if (url.startsWith("rtsp://")) {
+                return true; // 直接认为是视频
+            }
             if (url.contains("url=http") || url.contains(".html")) {
                 return false;
             }
