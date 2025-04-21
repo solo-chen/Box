@@ -201,6 +201,9 @@ public class DefaultConfig {
                     "http((?!http).)*?netease\\.com/file/.*"
     );
     public static boolean isVideoFormat(String url) {
+        if (url.startsWith("rtsp://")) {
+            return true; 
+        }
         if (url.contains("=http")) {
             return false;
         }
